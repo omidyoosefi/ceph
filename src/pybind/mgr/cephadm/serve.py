@@ -950,6 +950,21 @@ class CephadmServe:
         rank_map = None
         if svc.ranked(spec):
             rank_map = self.mgr.spec_store[spec.service_name()].rank_map or {}
+
+        nfs_daemon_count: Dict[str, int] = {}
+        # this is only for NFS, but should it include SMB daemons too?
+        if service_type == "nfs":
+            nfs_queued_deploy = [dp for (dp, _) in self.mgr.daemon_deploy_queue.get_all_queued_daemons() if dp.daemon_type == 'nfs']
+            nfs_queued_removal = [dp for (dp, _) in self.mgr.daemon_removal_queue.get_all_queued_daemons() if dp.daemon_type == 'nfs']
+            for d in self.mgr.cache.get_daemons_by_type('nfs'):
+                nfs_daemon_count[d.hostname] = nfs_daemon_count.get(d.hostname, 0) + 1
+
+            for d in nfs_queued_deploy:
+                nfs_daemon_count[d.hostname] = nfs_daemon_count.get(d.hostname, 0) + 1
+
+            for d in nfs_queued_removal:
+                nfs_daemon_count[d.hostname] = nfs_daemon_count.get(d.hostname, 0) - 1
+
         ha = HostAssignment(
             spec=spec,
             hosts=self.mgr.cache.get_non_draining_hosts() if spec.service_name(
@@ -965,6 +980,7 @@ class CephadmServe:
             primary_daemon_type=svc.primary_daemon_type(spec),
             per_host_daemon_type=svc.per_host_daemon_type(spec),
             rank_map=rank_map,
+            nfs_daemon_count=nfs_daemon_count,
         )
 
         try:

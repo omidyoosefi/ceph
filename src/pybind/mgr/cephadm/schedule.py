@@ -155,6 +155,7 @@ class HostAssignment(object):
                  per_host_daemon_type: Optional[str] = None,
                  rank_map: Optional[Dict[int, Dict[int, Optional[str]]]] = None,
                  blocking_daemon_hosts: Optional[List[orchestrator.HostSpec]] = None,
+                 nfs_daemon_count: Optional[Dict[str, int]] = None,
                  ):
         assert spec
         self.spec = spec  # type: ServiceSpec
@@ -172,6 +173,9 @@ class HostAssignment(object):
         self.per_host_daemon_type = per_host_daemon_type
         self.ports_start = spec.get_port_start()
         self.rank_map = rank_map
+
+        self.nfs_daemon_count = nfs_daemon_count or {}
+        self.is_nfs = self.primary_daemon_type in ['nfs']
 
     def hosts_by_label(self, label: str) -> List[orchestrator.HostSpec]:
         return [h for h in self.hosts if label in h.labels]
@@ -620,7 +624,14 @@ class HostAssignment(object):
                                                   f'host mapping is {label_host_mapping} and hosts that already '
                                                   f'have daemons mapping is {label_already_present_host_mapping}')
             if len(already_present_hosts) < count_per_label:
-                selected_hosts.extend(potential_hosts[:(count_per_label - len(already_present_hosts))])
+                if self.is_nfs:
+                    potential_hosts_sorted = sorted(
+                    potential_hosts,
+                    key=lambda h: self.nfs_daemon_count.get(h.hostname, 0)
+                    )
+                    selected_hosts.extend(potential_hosts_sorted[:(count_per_label - len(already_present_hosts))])
+                else:
+                    selected_hosts.extend(potential_hosts[:(count_per_label - len(already_present_hosts))])
             label_host_mapping[label_with_least_hosts] = selected_hosts
             label_already_present_host_mapping[label_with_least_hosts] = already_present_hosts
             new_label_to_candidate_hosts = copy.deepcopy(label_to_candidate_hosts)
